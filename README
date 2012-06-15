@@ -1,0 +1,31 @@
+Basic and lightweight ssh expect.
+
+Run commands on ssh hosts and handle prompts (passwords, confirmations, etc).
+
+
+Example:
+
+    # We run rsync with sudo from a remote host to another remote host
+
+    from sshex import Ssh
+
+    src_host = 'host1'
+    src_username = 'user1'
+    src_password = 'password1'
+    src_path = '/path/src/'
+
+    ssh = Ssh(src_host, src_username, src_password)
+
+    dst_host = 'host2'
+    dst_username = 'user2'
+    dst_password = 'password2'
+    dst_path = '/path/dst/'
+
+    cmd = 'rsync -av %s %s@%s:%s' % (src_path, dst_username, dst_host, dst_path)
+
+    expects = [(r'(?i)\bpassword\b', dst_password)]
+
+    output, return_code = ssh.run(cmd, expects=expects, use_sudo=True)
+
+    print 'output:', output
+    print 'return code:', return_code
