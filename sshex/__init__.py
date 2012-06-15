@@ -38,22 +38,28 @@ class Ssh(object):
     def _strip_prompt(self, data):
         return re.sub(r'[\r\n]*%s[\r\n]*' % PROMPT, '', data)
 
-    def _send(self, cmd):
+    def _send(self, cmd, timeout=10):
         '''Send a command and flush the buffer.
 
         :return: command output
         '''
         logger.debug('running cmd "%s" on %s@%s', cmd, self.username, self.host)
+        started = time.time()
         self.shell.send('%s\n' % cmd)
 
         buf = ''
-        for i in range(30):
+        while True:
             if self.shell.recv_ready():
-                res = self.shell.recv(BUFFER_SIZE)
+                res = self._recv()
                 res = res.split('\n', 1)[-1]     # strip the command
                 buf += res
                 if res.endswith(PROMPT):
                     return self._strip_prompt(buf)
+
+            if time.time() - started > timeout:
+                logger.error('cmd "%s" timed out: %s', cmd, buf)
+                return buf
+
             time.sleep(.1)
 
     def _get_return_code(self):
@@ -61,7 +67,7 @@ class Ssh(object):
         try:
             return int(res)
         except Exception:
-            logger.error('failed to get return code from "%s"', res)
+            logger.error('failed to get return code from "%s": %s', res, self.buffer)
 
     def _get_expects(self, expects):
         res = []
@@ -72,9 +78,15 @@ class Ssh(object):
         return res
 
     def _get_shell(self):
+        self.buffer = ''
         self.shell = self.client.invoke_shell()
         self.shell.set_combine_stderr(True)
         self._send('PS1="%s"' % PROMPT)
+
+    def _recv(self, buffer_size=BUFFER_SIZE):
+        res = self.shell.recv(buffer_size)
+        self.buffer += res
+        return res
 
     def run(self, cmd, expects=None, use_sudo=False, timeout=10, split_output=True):
         '''Run a command on the host and handle prompts.
@@ -110,7 +122,7 @@ class Ssh(object):
 
         while True:
             if self.shell.recv_ready():
-                res = self.shell.recv(BUFFER_SIZE)
+                res = self._recv()
                 if lstrip_line:
                     res = res.split('\n', 1)[-1]     # strip the command
                     lstrip_line = False
