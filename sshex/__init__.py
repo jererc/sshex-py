@@ -6,11 +6,12 @@ import paramiko
 
 
 CONNECTION_TIMEOUT = 10
-PROMPT = '###PROMPT###'
+PROMPT = '___PROMPT___'
 BUFFER_SIZE = 1024
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class Ssh(object):
@@ -35,6 +36,9 @@ class Ssh(object):
             if log_errors:
                 logger.error('failed to connect to %s@%s: %s', username, host, e)
 
+    def _strip_prompt(self, data):
+        return re.sub(r'[\r\n]*%s[\r\n]*' % PROMPT, '', data)
+
     def _get_output(self, cmd):
         '''Get command output as a list of lines.
         '''
@@ -48,7 +52,7 @@ class Ssh(object):
                 res = res.split('\n', 1)[-1]     # strip the command
                 buf += res
                 if res.endswith(PROMPT):
-                    return buf.splitlines()[:-1]    # # strip the prompt line
+                    return self._strip_prompt(buf)
             time.sleep(.1)
 
     def _get_return_code(self):
@@ -107,6 +111,7 @@ class Ssh(object):
         while True:
             if self.shell.recv_ready():
                 res = self.shell.recv(BUFFER_SIZE)
+
                 if lstrip_line:
                     res = res.split('\n', 1)[-1]     # strip the command
                     lstrip_line = False
@@ -114,10 +119,9 @@ class Ssh(object):
                 buf += res
 
                 if buf.endswith(PROMPT):
-                    stdout = buf.rsplit('\n', 1)[0]  # strip the prompt line
+                    stdout = self._strip_prompt(buf)
                     if split_output:
                         stdout = stdout.splitlines()
-
                     return_code = self._get_return_code()
                     break
 
