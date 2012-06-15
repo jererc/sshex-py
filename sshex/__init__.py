@@ -38,8 +38,10 @@ class Ssh(object):
     def _strip_prompt(self, data):
         return re.sub(r'[\r\n]*%s[\r\n]*' % PROMPT, '', data)
 
-    def _get_output(self, cmd):
-        '''Get command output as a list of lines.
+    def _send(self, cmd):
+        '''Send a command and flush the buffer.
+
+        :return: command output
         '''
         logger.debug('running cmd "%s" on %s@%s', cmd, self.username, self.host)
         self.shell.send('%s\n' % cmd)
@@ -55,12 +57,11 @@ class Ssh(object):
             time.sleep(.1)
 
     def _get_return_code(self):
-        res = self._get_output('echo $?')
-        if res:
-            try:
-                return int(res)
-            except Exception:
-                logger.error('failed to get return code from "%s"', res)
+        res = self._send('echo $?')
+        try:
+            return int(res)
+        except Exception:
+            logger.error('failed to get return code from "%s"', res)
 
     def _get_expects(self, expects):
         res = []
@@ -73,7 +74,7 @@ class Ssh(object):
     def _get_shell(self):
         self.shell = self.client.invoke_shell()
         self.shell.set_combine_stderr(True)
-        self._get_output('PS1="%s"' % PROMPT)
+        self._send('PS1="%s"' % PROMPT)
 
     def run(self, cmd, expects=None, use_sudo=False, timeout=10, split_output=True):
         '''Run a command on the host and handle prompts.
