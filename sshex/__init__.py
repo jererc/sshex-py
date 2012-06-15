@@ -11,7 +11,6 @@ BUFFER_SIZE = 1024
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 class Ssh(object):
@@ -59,7 +58,7 @@ class Ssh(object):
         res = self._get_output('echo $?')
         if res:
             try:
-                return int(res[0])
+                return int(res)
             except Exception:
                 logger.error('failed to get return code from "%s"', res)
 
@@ -111,7 +110,6 @@ class Ssh(object):
         while True:
             if self.shell.recv_ready():
                 res = self.shell.recv(BUFFER_SIZE)
-
                 if lstrip_line:
                     res = res.split('\n', 1)[-1]     # strip the command
                     lstrip_line = False
