@@ -8,6 +8,7 @@ import paramiko
 CONNECTION_TIMEOUT = 10
 PROMPT = '___PROMPT___'
 BUFFER_SIZE = 1024
+RE_PASSWORD = re.compile(r'(?i)\bpassword\b.*?:\W*$')
 
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,7 @@ class Ssh(object):
 
     def _recv(self, buffer_size=BUFFER_SIZE):
         res = self.shell.recv(buffer_size)
+        logger.debug('buffer: %s', repr(res))
         self.buffer += res
         return res
 
@@ -105,7 +107,7 @@ class Ssh(object):
         if use_sudo:
             cmd = 'sudo %s' % cmd
             if self.password:
-                expects.insert(0, (r'(?i)\bpassword\b', self.password))
+                expects.insert(0, (RE_PASSWORD, self.password))
 
         expects = self._get_expects(expects)
 
@@ -139,6 +141,7 @@ class Ssh(object):
                 else:
                     for expect, msg in expects[:]:
                         if expect.search(buf):
+                            logger.debug('expect match: %s', expect.pattern)
                             expects.remove((expect, msg))
                             self.shell.send('%s\n' % msg)
                             lstrip_line = True
