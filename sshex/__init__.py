@@ -5,10 +5,12 @@ import logging
 import paramiko
 
 
-CONNECTION_TIMEOUT = 10
 PROMPT = '___PROMPT___'
+SUDO_PROMPT = '___SUDOPROMPT___'
+RE_SUDO_PROMPT = re.compile(r'%s$' % SUDO_PROMPT)
+CONNECTION_TIMEOUT = 10
+TERM_WIDTH = 1024
 BUFFER_SIZE = 1024
-RE_PASSWORD = re.compile(r'(?i)\bpassword\b.*?:\W*$')
 
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,7 @@ class Ssh(object):
         self.port = port
         self.username = username
         self.password = password
+        self.shell = None
 
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -36,39 +39,12 @@ class Ssh(object):
             if log_errors:
                 logger.error('failed to connect to %s@%s: %s', username, host, e)
 
-    def _strip_prompt(self, data):
-        return re.sub(r'[\r\n]*%s[\r\n]*' % PROMPT, '', data)
-
-    def _send(self, cmd, timeout=10):
-        '''Send a command and flush the buffer.
-
-        :return: command output
-        '''
-        logger.debug('running cmd "%s" on %s@%s', cmd, self.username, self.host)
-        started = time.time()
-        self.shell.send('%s\n' % cmd)
-
-        buf = ''
-        while True:
-            if self.shell.recv_ready():
-                res = self._recv()
-                res = res.split('\n', 1)[-1]     # strip the command
-                buf += res
-                if res.endswith(PROMPT):
-                    return self._strip_prompt(buf)
-
-            if time.time() - started > timeout:
-                logger.error('cmd "%s" timed out: %s', cmd, buf)
-                return buf
-
-            time.sleep(.1)
-
     def _get_return_code(self):
-        res = self._send('echo $?')
+        res = self.run('echo $?', get_return_code=False)[0]
         try:
-            return int(res)
+            return int(res[0])
         except Exception:
-            logger.error('failed to get return code from "%s": %s', res, self.buffer)
+            logger.error('failed to get return code from %s: %s', res, self.buffer)
 
     def _get_expects(self, expects):
         res = []
@@ -79,18 +55,34 @@ class Ssh(object):
         return res
 
     def _get_shell(self):
-        self.buffer = ''
         self.shell = self.client.invoke_shell()
+        self.shell.resize_pty(width=TERM_WIDTH)
         self.shell.set_combine_stderr(True)
-        self._send('PS1="%s"' % PROMPT)
+        self.buffer = ''
+        self.run('PS1="%s"' % PROMPT, get_return_code=False)
 
-    def _recv(self, buffer_size=BUFFER_SIZE):
-        res = self.shell.recv(buffer_size)
-        logger.debug('buffer: %s', repr(res))
-        self.buffer += res
-        return res
+    def _send(self, cmd):
+        logger.debug('send %s on %s@%s', repr(cmd), self.username, self.host)
+        self.shell.send('%s\n' % cmd)
 
-    def run(self, cmd, expects=None, use_sudo=False, timeout=10, split_output=True):
+    def _recv(self):
+        '''Receive data until the buffer is empty.
+        '''
+        res = ''
+        while self.shell.recv_ready():
+            res += self.shell.recv(BUFFER_SIZE)
+
+        if res:
+            logger.debug('recv %s on %s@%s', repr(res), self.username, self.host)
+            self.buffer += res
+            return res
+
+    def _strip_last_line(self, data):
+        if '\r\n' in data:
+            return data.rsplit('\r\n', 1)[0]
+        return ''
+
+    def run(self, cmd, expects=None, use_sudo=False, timeout=10, split_output=True, get_return_code=True):
         '''Run a command on the host and handle prompts.
 
         :param cmd: command to run
@@ -105,53 +97,53 @@ class Ssh(object):
         if not expects:
             expects = []
         if use_sudo:
-            cmd = 'sudo %s' % cmd
+            cmd = 'sudo -p %s %s' % (SUDO_PROMPT, cmd)
             if self.password:
-                expects.insert(0, (RE_PASSWORD, self.password))
+                expects.insert(0, (RE_SUDO_PROMPT, self.password))
 
-        expects = self._get_expects(expects)
-
-        self._get_shell()
-
-        logger.debug('running cmd "%s" on %s@%s', cmd, self.username, self.host)
-        self.shell.send('%s\n' % cmd)
+        if expects:
+            expects = self._get_expects(expects)
+        if not self.shell:
+            self._get_shell()
 
         stdout = None
         return_code = None
-        buf = ''
-        lstrip_line = True
+        strip_first_line = True
         started = time.time()
+        buf = ''
 
+        self._send(cmd)
         while True:
-            if self.shell.recv_ready():
-                res = self._recv()
-                if lstrip_line:
-                    res = res.split('\n', 1)[-1]     # strip the command
-                    lstrip_line = False
+            res = self._recv()
+            if not res:
+                if time.time() - started > timeout:
+                    logger.error('cmd "%s" timed out: %s', cmd, buf)
+                    break
+                time.sleep(.1)
+
+            else:
+                if strip_first_line:
+                    res = res.split('\r\n', 1)[-1]
+                    strip_first_line = False
 
                 buf += res
 
                 if buf.endswith(PROMPT):
-                    stdout = self._strip_prompt(buf)
+                    stdout = re.sub(r'%s(\r\n)*' % PROMPT, '', buf)
                     if split_output:
                         stdout = stdout.splitlines()
-                    return_code = self._get_return_code()
+                    if get_return_code:
+                        return_code = self._get_return_code()
                     break
 
-                else:
+                elif expects:
                     for expect, msg in expects[:]:
                         if expect.search(buf):
-                            logger.debug('expect match: %s', expect.pattern)
+                            logger.debug('expect match: %s', repr(expect.pattern))
                             expects.remove((expect, msg))
-                            self.shell.send('%s\n' % msg)
-                            lstrip_line = True
-                            buf = ''
+                            self._send(msg)
+                            strip_first_line = True     # for sent message removal
+                            buf = self._strip_last_line(buf)     # remove the matched expect
                             break
-
-            if time.time() - started > timeout:
-                logger.error('cmd "%s" timed out: %s', cmd, buf)
-                break
-
-            time.sleep(.1)
 
         return stdout, return_code
