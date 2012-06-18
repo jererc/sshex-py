@@ -9,20 +9,21 @@ Example:
 
     from sshex import Ssh
 
-    src_host = 'host1'
-    src_username = 'user1'
-    src_password = 'password1'
+    src_host = 'src_host'
+    src_username = 'src_username'
+    src_password = 'src_password'
     src_path = '/path/src/'
 
     ssh = Ssh(src_host, src_username, src_password)
 
-    dst_host = 'host2'
-    dst_username = 'user2'
-    dst_password = 'password2'
+    dst_host = 'dst_host'
+    dst_username = 'dst_username'
+    dst_password = 'dst_password'
     dst_path = '/path/dst/'
 
     cmd = 'rsync -av %s %s@%s:%s' % (src_path, dst_username, dst_host, dst_path)
 
+    # sudo expect pattern and password are automatically handled
     expects = [
         (r'(?i)\(yes/no\)', 'yes'),
         (r'(?i)\bpassword\b', dst_password),
