@@ -108,7 +108,7 @@ class Ssh(object):
 
         stdout = None
         return_code = None
-        strip_first_line = True
+        strip_next_line = True
         started = time.time()
         buf = ''
 
@@ -122,9 +122,9 @@ class Ssh(object):
                 time.sleep(.1)
 
             else:
-                if strip_first_line:
+                if strip_next_line:     # remove the sent message from the buffer
                     res = res.split('\r\n', 1)[-1]
-                    strip_first_line = False
+                    strip_next_line = False
 
                 buf += res
 
@@ -142,7 +142,7 @@ class Ssh(object):
                             logger.debug('expect match: %s', repr(expect.pattern))
                             expects.remove((expect, msg))
                             self._send(msg)
-                            strip_first_line = True     # for sent message removal
+                            strip_next_line = True
                             buf = self._strip_last_line(buf)     # remove the matched expect
                             break
 
