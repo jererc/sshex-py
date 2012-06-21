@@ -10,7 +10,6 @@ SUDO_PROMPT = '___SUDOPROMPT___'
 RE_SUDO_PROMPT = re.compile(r'%s$' % SUDO_PROMPT)
 TERM_WIDTH = 1024
 BUFFER_SIZE = 1024
-MAX_BUFFER_SIZE = 10000
 
 
 logger = logging.getLogger(__name__)
@@ -18,9 +17,8 @@ logger = logging.getLogger(__name__)
 
 class Ssh(object):
     def __init__(self, host, username, password=None, port=22,
-                key_filename=None, timeout=10, log_errors=True):
+                timeout=10, log_errors=True, **kwargs):
         self.host = host
-        self.port = port
         self.username = username
         self.password = password
         self.chan = None
@@ -28,12 +26,8 @@ class Ssh(object):
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
-            self.client.connect(host,
-                    port=port,
-                    username=username,
-                    password=password,
-                    key_filename=key_filename,
-                    timeout=timeout)
+            self.client.connect(host, port=port, username=username,
+                    password=password, timeout=timeout, **kwargs)
             self.logged = True
         except Exception, e:
             self.logged = False
@@ -43,7 +37,7 @@ class Ssh(object):
     def _get_chan(self):
         self.chan = self.client.invoke_shell(width=TERM_WIDTH)
         self.chan.set_combine_stderr(True)
-        self.buffer = ''
+        self.output = ''
         self.strip_sent = False
         self.run('PS1="%s"' % PROMPT, get_return_code=False)
 
@@ -52,6 +46,7 @@ class Ssh(object):
         if self.chan.send_ready():
             res = self.chan.send(cmd)
             if res == len(cmd):
+                self.output = ''
                 self.strip_sent = True
                 logger.debug('send %s on %s@%s', repr(cmd), self.username, self.host)
                 return True
@@ -62,11 +57,9 @@ class Ssh(object):
         res = ''
         while self.chan.recv_ready():
             res += self.chan.recv(BUFFER_SIZE)
-            time.sleep(.01)
 
         if res:
             logger.debug('recv %s on %s@%s', repr(res), self.username, self.host)
-            self.buffer = str(self.buffer + res)[-MAX_BUFFER_SIZE:]
             self.output += res
             if self.strip_sent and '\r\n' in self.output:    # strip sent data from the output
                 self.output = self.output.split('\r\n', 1)[-1]
@@ -78,7 +71,7 @@ class Ssh(object):
         try:
             return int(res[0])
         except Exception:
-            logger.error('failed to get return code from %s: %s', res, repr(self.buffer))
+            logger.error('failed to get return code from %s: %s', res, repr(self.output))
 
     def _get_expects(self, expects):
         res = []
@@ -124,7 +117,6 @@ class Ssh(object):
         stdout = None
         return_code = None
         started = time.time()
-        self.output = ''
 
         if not self._send(cmd):
             return None, None
@@ -147,9 +139,7 @@ class Ssh(object):
 
             elif expects:
                 msg = self._expect(expects)
-                if msg:
-                    if not self._send(msg):
-                        return None, None
-                    self.output = ''
+                if msg and not self._send(msg):
+                    break
 
         return stdout, return_code
