@@ -17,22 +17,24 @@ logger = logging.getLogger(__name__)
 
 class Ssh(object):
     def __init__(self, host, username, password=None, port=22,
-                timeout=10, log_errors=True, **kwargs):
+                timeout=10, max_attempts=3, log_errors=True, **kwargs):
         self.host = host
+        self.port = port
         self.username = username
         self.password = password
         self.chan = None
-
+        self.logged = False
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        try:
-            self.client.connect(host, port=port, username=username,
-                    password=password, timeout=timeout, **kwargs)
-            self.logged = True
-        except Exception, e:
-            self.logged = False
-            if log_errors:
-                logger.error('failed to connect to %s@%s: %s', username, host, e)
+        for i in range(max_attempts):
+            try:
+                self.client.connect(host, port=port, username=username,
+                        password=password, timeout=timeout, **kwargs)
+                self.logged = True
+                return
+            except Exception, e:
+                if i == max_attempts - 1 and log_errors:
+                    logger.error('failed to connect to %s@%s:%s: %s', username, host, port, e)
 
     def _get_chan(self):
         self.chan = self.client.invoke_shell(width=TERM_WIDTH)
