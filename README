@@ -23,7 +23,7 @@ Example:
 
     cmd = 'rsync -av %s %s@%s:%s' % (src_path, dst_username, dst_host, dst_path)
 
-    # sudo expect pattern and password are automatically handled
+    # expect patterns (sudo password is automatically handled)
     expects = [
         (r'(?i)\(yes/no\)', 'yes'),
         (r'(?i)\bpassword\b', dst_password),

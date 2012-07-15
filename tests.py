@@ -6,10 +6,6 @@ from settings import HOST, USERNAME, PASSWORD
 from sshex import Ssh
 
 
-logged = Ssh(HOST, USERNAME, PASSWORD).logged
-
-
-@unittest.skipIf(not logged, 'failed to connect to %s@%s' % (USERNAME, HOST))
 class RunTest(unittest.TestCase):
 
     def setUp(self):
@@ -47,7 +43,6 @@ class RunTest(unittest.TestCase):
         self.assertEqual(return_code, 0)
 
 
-@unittest.skipIf(not logged, 'failed to connect to %s@%s' % (USERNAME, HOST))
 class RunExpectTest(unittest.TestCase):
 
     def setUp(self):
@@ -91,7 +86,6 @@ class RunExpectTest(unittest.TestCase):
             self.assertEqual(return_code, 0)
 
 
-@unittest.skipIf(not logged, 'failed to connect to %s@%s' % (USERNAME, HOST))
 class RunSudoTest(unittest.TestCase):
 
     def setUp(self):

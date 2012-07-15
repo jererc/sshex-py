@@ -1,5 +1,6 @@
 import re
 import time
+import socket
 import logging
 
 import paramiko
@@ -15,26 +16,33 @@ BUFFER_SIZE = 1024
 logger = logging.getLogger(__name__)
 
 
+class AuthenticationError(Exception): pass
+class TimeoutError(Exception): pass
+class SshError(Exception): pass
+
+
 class Ssh(object):
-    def __init__(self, host, username, password=None, port=22,
-                timeout=10, max_attempts=3, log_errors=True, **kwargs):
+    def __init__(self, host, username, password=None, port=22, timeout=10,
+                max_attempts=3, **kwargs):
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.chan = None
-        self.logged = False
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         for i in range(max_attempts):
             try:
                 self.client.connect(host, port=port, username=username,
                         password=password, timeout=timeout, **kwargs)
-                self.logged = True
                 return
+            except (paramiko.BadHostKeyException, paramiko.AuthenticationException), e:
+                raise AuthenticationError(str(e))
+            except socket.timeout, e:
+                raise TimeoutError(str(e))
             except Exception, e:
-                if i == max_attempts - 1 and log_errors:
-                    logger.error('failed to connect to %s@%s:%s: %s', username, host, port, e)
+                if i == max_attempts - 1:
+                    raise SshError(str(e))
 
     def _get_chan(self):
         self.chan = self.client.invoke_shell(width=TERM_WIDTH)
