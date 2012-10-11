@@ -12,7 +12,6 @@ RE_SUDO_PROMPT = re.compile(r'%s$' % SUDO_PROMPT)
 TERM_WIDTH = 1024
 BUFFER_SIZE = 1024
 
-
 logger = logging.getLogger(__name__)
 
 
