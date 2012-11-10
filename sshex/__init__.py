@@ -6,8 +6,8 @@ import logging
 import paramiko
 
 
-PROMPT = '___PROMPT___'
-SUDO_PROMPT = '___SUDOPROMPT___'
+PROMPT = '__PROMPT__'
+SUDO_PROMPT = '__SUDOPROMPT__'
 RE_SUDO_PROMPT = re.compile(r'%s$' % SUDO_PROMPT)
 TERM_WIDTH = 1024
 BUFFER_SIZE = 1024
@@ -21,8 +21,9 @@ class SshError(Exception): pass
 
 
 class Ssh(object):
+
     def __init__(self, host, username, password=None, port=22, timeout=10,
-                max_attempts=3, **kwargs):
+            max_attempts=3, **kwargs):
         self.host = host
         self.port = port
         self.username = username
@@ -62,12 +63,14 @@ class Ssh(object):
 
         logger.error('failed to send %s on %s@%s', repr(cmd), self.username, self.host)
 
-    def _recv(self):
+    def _recv(self, callback=None):
         res = ''
         while self.chan.recv_ready():
             res += self.chan.recv(BUFFER_SIZE)
 
         if res:
+            if callback:
+                callback(res)
             logger.debug('recv %s on %s@%s', repr(res), self.username, self.host)
             self.output += res
             if self.strip_sent and '\r\n' in self.output:    # strip sent data from the output
@@ -98,7 +101,7 @@ class Ssh(object):
                 return msg
 
     def run(self, cmd, expects=None, use_sudo=False, timeout=10,
-                split_output=True, get_return_code=True):
+            split_output=True, get_return_code=True, callback=None):
         '''Run a command on the host and handle prompts.
 
         :param cmd: command to run
@@ -131,7 +134,7 @@ class Ssh(object):
             return None, None
 
         while True:
-            if not self._recv():
+            if not self._recv(callback=callback):
                 if time.time() - started > timeout:
                     logger.error('cmd "%s" timed out: %s', repr(cmd), repr(self.output))
                     break
