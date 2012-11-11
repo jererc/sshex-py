@@ -9,6 +9,7 @@ import paramiko
 PROMPT = '__PROMPT__'
 SUDO_PROMPT = '__SUDOPROMPT__'
 RE_SUDO_PROMPT = re.compile(r'%s$' % SUDO_PROMPT)
+RE_LINE = re.compile(r'\r?\n')
 TERM_WIDTH = 1024
 BUFFER_SIZE = 1024
 
@@ -73,8 +74,8 @@ class Ssh(object):
                 callback(res)
             logger.debug('recv %s on %s@%s', repr(res), self.username, self.host)
             self.output += res
-            if self.strip_sent and '\r\n' in self.output:    # strip sent data from the output
-                self.output = self.output.split('\r\n', 1)[-1]
+            if self.strip_sent and RE_LINE.search(self.output):    # strip sent data from the output
+                self.output = RE_LINE.split(self.output, 1)[-1]
                 self.strip_sent = False
             return True
 
@@ -148,7 +149,6 @@ class Ssh(object):
                 if get_return_code:
                     return_code = self._get_return_code()
                 break
-
             elif expects:
                 msg = self._expect(expects)
                 if msg and not self._send(msg):
