@@ -1,15 +1,35 @@
 #!/usr/bin/env python
+import os.path
+import json
 import unittest
-
-from settings import HOST, USERNAME, PASSWORD
+import logging
 
 from sshex import Ssh
 
 
+logging.basicConfig(level=logging.DEBUG)
+logging.getLogger('paramiko').setLevel(logging.CRITICAL)
+logging.getLogger('sshex').setLevel(logging.INFO)
+
+conf = {
+    'host': 'localhost',
+    'username': '',
+    'password': '',
+    }
+try:
+    conf_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+            'tests_config.json')
+    with open(conf_file) as fd:
+        conf.update(json.load(fd))
+except Exception, e:
+    logging.debug('failed to load tests config: %s' % str(e))
+
+
+@unittest.skipIf(not conf['username'], 'missing username in config')
 class RunTest(unittest.TestCase):
 
     def setUp(self):
-        self.ssh = Ssh(HOST, USERNAME, PASSWORD)
+        self.ssh = Ssh(conf['host'], conf['username'], conf['password'])
 
     def test_invalid_cmd(self):
         stdout, return_code = self.ssh.run('invalid', split_output=False)
@@ -39,14 +59,15 @@ class RunTest(unittest.TestCase):
 
     def test_cmd_output(self):
         stdout, return_code = self.ssh.run('whoami')
-        self.assertEqual(stdout, [USERNAME])
+        self.assertEqual(stdout, [conf['username']])
         self.assertEqual(return_code, 0)
 
 
+@unittest.skipIf(not conf['username'], 'missing username in config')
 class RunExpectTest(unittest.TestCase):
 
     def setUp(self):
-        self.ssh = Ssh(HOST, USERNAME, PASSWORD)
+        self.ssh = Ssh(conf['host'], conf['username'], conf['password'])
 
     def test_single_expect(self):
         expected = 'expected_string'
@@ -86,10 +107,11 @@ class RunExpectTest(unittest.TestCase):
             self.assertEqual(return_code, 0)
 
 
+@unittest.skipIf(not conf['username'], 'missing username in config')
 class RunSudoTest(unittest.TestCase):
 
     def setUp(self):
-        self.ssh = Ssh(HOST, USERNAME, PASSWORD)
+        self.ssh = Ssh(conf['host'], conf['username'], conf['password'])
 
     def test_no_output(self):
         stdout, return_code = self.ssh.run('sudo echo -n', use_sudo=True, split_output=False)
@@ -114,4 +136,4 @@ class RunSudoTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main(catchbreak=True, verbosity=2)
+    unittest.main()
