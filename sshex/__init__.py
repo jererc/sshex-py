@@ -59,10 +59,10 @@ class Ssh(object):
             if res == len(cmd):
                 self.output = ''
                 self.strip_sent = True
-                logger.debug('send %s on %s@%s', repr(cmd), self.username, self.host)
+                logger.debug('send "%s" on %s@%s' % (cmd, self.username, self.host))
                 return True
 
-        logger.error('failed to send %s on %s@%s', repr(cmd), self.username, self.host)
+        logger.error('failed to send "%s" on %s@%s' % (cmd, self.username, self.host))
 
     def _recv(self, callback=None):
         res = ''
@@ -72,7 +72,7 @@ class Ssh(object):
         if res:
             if callback:
                 callback(res)
-            logger.debug('recv %s on %s@%s', repr(res), self.username, self.host)
+            logger.debug('recv "%s" on %s@%s' % (res, self.username, self.host))
             self.output += res
             if self.strip_sent and RE_EOL.search(self.output):    # strip sent data from the output
                 self.output = RE_EOL.split(self.output, 1)[-1]
@@ -84,7 +84,7 @@ class Ssh(object):
         try:
             return int(res[0])
         except Exception:
-            logger.error('failed to get return code from %s: %s', res, repr(self.output))
+            logger.error('failed to get return code from %s: %s' % (res, str(self.output)))
 
     def _get_expects(self, expects):
         res = []
@@ -98,7 +98,7 @@ class Ssh(object):
         for re_, msg in expects[:]:
             if re_.search(self.output):
                 expects.remove((re_, msg))
-                logger.debug('expect match: %s', repr(re_.pattern))
+                logger.debug('expect match: "%s"' % str(re_.pattern))
                 return msg
 
     def run(self, cmd, expects=None, use_sudo=False, timeout=10,
@@ -137,7 +137,7 @@ class Ssh(object):
         while True:
             if not self._recv(callback=callback):
                 if time.time() - started > timeout:
-                    logger.error('cmd "%s" timed out: %s', repr(cmd), repr(self.output))
+                    logger.error('cmd "%s" timed out: %s' % (cmd, str(self.output)))
                     break
                 time.sleep(.1)
                 continue
