@@ -45,6 +45,9 @@ class Ssh(object):
                 if i == max_attempts - 1:
                     raise SshError(str(e))
 
+    def __del__(self):
+        self.client.close()
+
     def _get_chan(self):
         self.chan = self.client.invoke_shell(width=TERM_WIDTH)
         self.chan.set_combine_stderr(True)
