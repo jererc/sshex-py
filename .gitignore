@@ -1,2 +1,2 @@
-.pyc
+*.pyc
 tests_config.json
