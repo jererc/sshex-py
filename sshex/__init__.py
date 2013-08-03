@@ -83,11 +83,12 @@ class Ssh(object):
             return True
 
     def _get_return_code(self):
-        res = self.run('echo $?', get_return_code=False)[0]
-        try:
-            return int(res[0])
-        except Exception:
-            logger.error('failed to get return code from "%s": %s' % (repr(res), repr(self.output)))
+        stdout = self.run('echo $?', get_return_code=False)[0]
+        if stdout is not None:
+            try:
+                return int(stdout[0])
+            except Exception:
+                logger.error('failed to get return code from "%s": %s' % (repr(stdout), repr(self.output)))
 
     def _get_expects(self, expects):
         res = []
@@ -132,29 +133,28 @@ class Ssh(object):
 
         stdout = None
         return_code = None
-        started = time.time()
 
-        if not self._send(cmd):
-            return None, None
+        if self._send(cmd):
+            started = time.time()
 
-        while True:
-            if not self._recv(callback=callback):
-                if time.time() - started > timeout:
-                    logger.error('cmd "%s" timed out on %s@%s: %s' % (cmd, self.username, self.host, repr(self.output)))
+            while True:
+                if not self._recv(callback=callback):
+                    if time.time() - started > timeout:
+                        logger.error('cmd "%s" timed out on %s@%s: %s' % (cmd, self.username, self.host, repr(self.output)))
+                        break
+                    time.sleep(.1)
+                    continue
+
+                if self.output.endswith(PROMPT):
+                    stdout = self.output.rstrip(PROMPT)
+                    if split_output:
+                        stdout = stdout.splitlines()
+                    if get_return_code:
+                        return_code = self._get_return_code()
                     break
-                time.sleep(.1)
-                continue
-
-            if self.output.endswith(PROMPT):
-                stdout = self.output.rstrip(PROMPT)
-                if split_output:
-                    stdout = stdout.splitlines()
-                if get_return_code:
-                    return_code = self._get_return_code()
-                break
-            elif expects:
-                msg = self._expect(expects)
-                if msg and not self._send(msg):
-                    break
+                elif expects:
+                    msg = self._expect(expects)
+                    if msg and not self._send(msg):
+                        break
 
         return stdout, return_code
